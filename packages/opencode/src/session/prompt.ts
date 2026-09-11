@@ -453,7 +453,7 @@ const layer = Layer.effect(
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const markReady = ready ? ready.open.pipe(Effect.asVoid) : Effect.void
-          const { msg, part, cwd } = yield* Effect.gen(function* () {
+          const { msg, part, cwd, directory } = yield* Effect.gen(function* () {
             const ctx = yield* InstanceState.context
             const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
             if (session.revert) {
@@ -517,7 +517,7 @@ const layer = Layer.effect(
               },
             }
             yield* sessions.updatePart(part)
-            return { msg, part, cwd: getCwd(ctx.directory) }
+            return { msg, part, cwd: getCwd(ctx.directory), directory: ctx.directory }
           }).pipe(Effect.ensuring(markReady))
 
           const cfg = yield* config.get()
@@ -629,7 +629,7 @@ const layer = Layer.effect(
                 const payload = (newlineIndex !== -1 ? afterSentinel.slice(0, newlineIndex) : afterSentinel).trim()
                 const parsed = parseCwdSentinelPayload(payload)
                 if (parsed.exitCode !== null) commandExitCode = parsed.exitCode
-                if (parsed.cwd) setCwd(parsed.cwd)
+                if (parsed.cwd) setCwd(parsed.cwd, { directory })
                 cleanOutput = stripSentinel(output)
               }
 

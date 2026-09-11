@@ -164,6 +164,49 @@ describe("parseCwdSentinelPayload — LAC-2693 regression", () => {
   })
 })
 
+// LAC-3732 regression: the session prompt runs under Effect InstanceRef, not
+// the ambient instance context (only CLI bootstrap enters that), so the emit
+// guarded by instanceContext.use() silently never fired and the TUI footer cwd
+// went stale. setCwd must publish when the caller passes the directory.
+describe("CwdEvent.Updated without ambient context — LAC-3732 regression", () => {
+  test("published when caller passes directory explicitly", async () => {
+    const received: string[] = []
+    const unsub = subscribeCwd(received)
+
+    setCwd("/tmp", { directory: "/some/project" })
+    await Bun.sleep(10)
+
+    expect(received).toEqual(["/tmp"])
+    unsub()
+  })
+
+  test("event carries the caller-provided instance directory", async () => {
+    const directories: (string | undefined)[] = []
+    const handler = (event: GlobalEvent) => {
+      if (event.payload?.type !== CwdEvent.Updated.type) return
+      directories.push(event.directory)
+    }
+    GlobalBus.on("event", handler)
+
+    setCwd("/tmp", { directory: "/some/project" })
+    await Bun.sleep(10)
+
+    expect(directories).toEqual(["/some/project"])
+    GlobalBus.off("event", handler)
+  })
+
+  test("not published when no ambient context and no directory passed", async () => {
+    const received: string[] = []
+    const unsub = subscribeCwd(received)
+
+    setCwd("/tmp")
+    await Bun.sleep(10)
+
+    expect(received).toEqual([])
+    unsub()
+  })
+})
+
 // LAC-742 regression: CwdEvent.Updated bus event
 describe("CwdEvent.Updated — LAC-742 regression", () => {
   test("published when cwd changes", async () => {

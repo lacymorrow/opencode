@@ -46,8 +46,13 @@ export function getCwd(fallback?: string): string {
 /**
  * Set the current working directory.
  * Handles ~ expansion and relative path resolution.
+ *
+ * Effect-based callers (session prompt) run with `InstanceRef`, not the
+ * ambient instance context, so they must pass `options.directory` or the
+ * cwd.updated event is silently skipped and the TUI footer goes stale
+ * (LAC-3732).
  */
-export function setCwd(dir: string): void {
+export function setCwd(dir: string, options?: { directory?: string }): void {
   let resolved = dir
 
   // Handle ~ expansion
@@ -66,17 +71,22 @@ export function setCwd(dir: string): void {
   // Publish event if cwd changed. EventV2 / Bus refactor (upstream PR #29068)
   // collapsed BusEvent.publish into GlobalBus.emit for ambient (non-Effect) callers.
   if (changed) {
-    try {
-      const ctx = instanceContext.use()
+    let directory = options?.directory
+    if (directory === undefined) {
+      try {
+        directory = instanceContext.use().directory
+      } catch {
+        // No instance context and no explicit directory; skip publishing
+      }
+    }
+    if (directory !== undefined) {
       GlobalBus.emit("event", {
-        directory: ctx.directory,
+        directory,
         payload: {
           type: CwdEvent.Updated.type,
           properties: { cwd: resolved },
         },
       })
-    } catch {
-      // No instance context available; skip publishing
     }
   }
 }
